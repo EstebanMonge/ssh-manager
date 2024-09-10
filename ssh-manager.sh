@@ -7,6 +7,16 @@
 #I also wanted to learn more about bash scripting with awk and sed
 # -- Scott Gopaulchan 2023
 
+# Set this variable to start the script with a default option.
+# Possible values:
+# createNewSSHCredentials
+# connectToSSHServer
+# editSSHConnection
+# listSSHCredentials
+# deleteSSHServer
+# Leave empty to default behavior
+
+start_default_option=""
 warning="\033[1;31m" #Red
 success="\033[1;32m" #Green
 info="\033[1;33m" #Yellow
@@ -434,6 +444,9 @@ fi
 
  }
 
-
-
-menu
+if [[ "${start_default_option}" != "" ]]
+then
+   $start_default_option
+else
+   menu
+fi
