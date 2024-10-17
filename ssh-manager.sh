@@ -144,6 +144,26 @@ editServerPort(){
     fi
 }
 
+addNewServerJumper() {
+option="invalid"
+jumperflag=""
+while [[ "$option" != "yes" ]] && [[ "$option" != "" ]]
+do
+	read -p "Use a jumper server? (yes or press enter for no) : " option
+done
+
+if [ "$option" == "yes" ]
+then
+    while [ "$jumperflag" == "" ]
+    do
+    	listSSHJumpers
+    	read -p "Write jumper name: " jumperflag
+    done
+else
+    jumperflag="NON3"
+fi
+}
+
 addNewServerUser(){
 
 
@@ -223,9 +243,10 @@ fi
     addNewServerPort
     addNewServerUser
     addNewServerKeyFile
+    addNewServerJumper
 
 
-    echo "$name,$ip,$port,$user,$keyfile" >> "$cfg_file_name"
+    echo "$name,$ip,$port,$user,$keyfile,$jumperflag" >> "$cfg_file_name"
 
     echo -e "${success}SSH Connection added successfully${reset}"
     read -p "Do you want to connect to the added SSH connection now? (y/n) " selection
@@ -237,6 +258,33 @@ fi
     menu
 
  }
+
+ createNewSSHJumper(){
+
+    printf "%s${info}===========================${reset}\n"
+    echo -e "${info}Add New SSH Jumper${reset}"
+    printf "%s${info}===========================${reset}\n"
+
+    addNewServer
+    addNewServerIp
+    addNewServerPort
+    addNewServerUser
+    addNewServerKeyFile
+
+
+    echo "$name,$ip,$port,$user,$keyfile,JUMP3R" >> "$cfg_file_name"
+
+    echo -e "${success}SSH Connection added successfully${reset}"
+    read -p "Do you want to connect to the added SSH connection now? (y/n) " selection
+    if [[ $selection =~ ^[Yy]$ ]]
+    then
+        connectToSSHServer "qc"
+    fi
+
+    menu
+
+ }
+
 
  editSSHConnection(){
 
@@ -294,8 +342,8 @@ fi
     echo -e "${info} Saved SSH Connections ${reset}"
     printf "%s${info}===========================${reset}\n"
     #Now to use awk to list the servers in a nice format 1 , 2 , 3 etc in a table format starting with the header but starting the numbering at from the second line
-    printf "%s${info}#  Name IP/Host Port Username Key file${reset}\n"
-    awk -F, '{print NR " " $1 " " $2 " " $3 " " $4 " " $5}' "$cfg_file_name" | column -t # -t is used to align the columns,  using awk is always awkward .... but it works
+    printf "%s${info}#  Name IP/Host Port Username Jumper Flag Key file ${reset}\n"
+    awk -F, '{print NR " " $1 " " $2 " " $3 " " $4 " " $6 " " $5}' "$cfg_file_name" | column -t # -t is used to align the columns,  using awk is always awkward .... but it works
 
     menu
 
@@ -303,6 +351,26 @@ fi
 
  }
 
+ listSSHJumpers() {
+    fileEmptyCheck
+    printf "%s${info}===========================${reset}\n"
+    echo -e "${info} Saved SSH Connections ${reset}"
+    printf "%s${info}===========================${reset}\n"
+    #Now to use awk to list the servers in a nice format 1 , 2 , 3 etc in a table format starting with the header but starting the numbering at from the second line
+    printf "%s${info}#  Name IP/Host Port Username Jumper Flag Key file ${reset}\n"
+    awk -F, '{print NR " " $1 " " $2 " " $3 " " $4 " " $6 " " $5}' "$cfg_file_name"|grep "JUMP3R" | column -t # -t is used to align the columns,  using awk is always awkward .... but it works
+
+ }
+
+ connectToSSHJumper(){
+    jumperName="$1"
+    fileEmptyCheck
+    jumperIp=$(awk -F, -v jumperName="$jumperName" '$1 ~ jumperName {print $2}' "$cfg_file_name")
+    jumperPort=$(awk -F, -v jumperName="$jumperName" '$1 ~ jumperName {print $3}' "$cfg_file_name")
+    jumperUser=$(awk -F, -v jumperName="$jumperName" '$1 ~ jumperName {print $4}' "$cfg_file_name")
+    jumperKeyFile=$(awk -F, -v jumperName="$jumperName" '$1 ~ jumperName {print $5}' "$cfg_file_name")
+ }
+ 
  connectToSSHServer(){
 
     if [ "$1" == "qc" ] #qc is the quick connect option
@@ -313,6 +381,7 @@ fi
         serverPort=$port
         serverUser=$user
         serverKeyFile=$keyfile
+        serverKeyFile=$jumperflag
     else
 
     fileEmptyCheck
@@ -354,7 +423,7 @@ fi
     serverPort=$(awk -F, -v serverNumber="$serverNumber" 'NR==serverNumber {print $3}' "$cfg_file_name")
     serverUser=$(awk -F, -v serverNumber="$serverNumber" 'NR==serverNumber {print $4}' "$cfg_file_name")
     serverKeyFile=$(awk -F, -v serverNumber="$serverNumber" 'NR==serverNumber {print $5}' "$cfg_file_name")
-
+    serverJumper=$(awk -F, -v serverNumber="$serverNumber" 'NR==serverNumber {print $6}' "$cfg_file_name")
 
 fi
     #echo $serverPort
@@ -362,9 +431,21 @@ fi
     printf "%s${success}Connecting to ${serverName} ...${reset}\n"
     if [ -z $serverKeyFile ]
     then
-        ssh -p "$serverPort" "$serverUser""@""$serverIp"
+        if [ "$serverJumper" == "NON3" ]
+	then
+        	ssh -p "$serverPort" "$serverUser""@""$serverIp"
+        else
+		connectToSSHJumper "$serverJumper"
+        	ssh -p "$jumperPort" -J "$jumperUser"@"$jumperIp" "$serverUser""@""$serverIp"
+        fi
     else
-        ssh -i "$serverKeyFile" -p "$serverPort" "$serverUser""@""$serverIp"
+        if [ "$serverJumper" == "NON3" ]
+	then
+        	ssh -i "$serverKeyFile" -p "$serverPort" "$serverUser""@""$serverIp"
+        else
+		connectToSSHJumper "$serverJumper"
+        	ssh -i "$jumperKeyFile" -p "$jumperPort" -J "$jumperUser"@"$jumperIp" "$serverUser""@""$serverIp"
+	fi
     fi
     menu
 
@@ -415,7 +496,6 @@ fi
 
     listSSHCredentials
 
-
  }
 
  menu(){
@@ -428,8 +508,9 @@ fi
     printf "3. Edit a saved SSH connection \n"
     printf "4. List Saved SSH connections \n"
     printf "%s${warning}5. Delete a saved SSH connection ${reset}\n"
-    printf "6. Exit\n"
-    printf "Enter your choice [1-6] : "
+    printf "6. Add new Jumper connection\n"
+    printf "7. Exit\n"
+    printf "Enter your choice [1-7] : "
     read -p "" choice
 
     case $choice in
@@ -438,7 +519,8 @@ fi
         3) editSSHConnection;;
         4) listSSHCredentials;;
         5) deleteSSHServer;;
-        6) exit;;
+        6) createNewSSHJumper;;
+        7) exit;;
         *) printf "%s${warning}Invalid choice${reset}\n"; menu;;
     esac
 
